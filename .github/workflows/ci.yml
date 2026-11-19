@@ -1,0 +1,35 @@
+name: CI – tests et sécurité
+
+on: [push, pull_request]
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: boutique
+          POSTGRES_PASSWORD: boutique-ci
+          POSTGRES_DB: boutique_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U boutique" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - name: Tests (SQLite)
+        run: pytest -q
+      - name: Tests (PostgreSQL)
+        run: pytest -q
+        env:
+          DATABASE_URL: postgresql://boutique:boutique-ci@localhost:5432/boutique_test
+      - name: Analyse statique (bandit)
+        run: bandit -q -r app
+      - name: Dépendances vulnérables (pip-audit)
+        run: pip-audit -r requirements.txt
+      - name: Construction de l'image Docker
+        run: docker build -t api-ecommerce .
